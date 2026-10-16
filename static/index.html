@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0b12" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>AI Video Generator</title>
+<style>
+  :root {
+    --bg: #0b0b12;
+    --card: #151522;
+    --card2: #1c1c2e;
+    --accent: #7c5cff;
+    --accent2: #00e0c6;
+    --text: #f2f2f8;
+    --muted: #9a9ab0;
+    --danger: #ff5c7a;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    padding: 20px 20px 12px; display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; background: linear-gradient(180deg, var(--bg) 80%, transparent);
+    z-index: 10;
+  }
+  header .logo {
+    width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center; font-size: 20px;
+  }
+  header h1 { font-size: 19px; margin: 0; line-height: 1.15; }
+  header p { margin: 0; font-size: 12px; color: var(--muted); }
+  .demo-badge {
+    margin-left: auto; font-size: 11px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255, 193, 7, .12); color: #ffd54f; border: 1px solid rgba(255,193,7,.3);
+  }
+  main { flex: 1; width: 100%; max-width: 560px; margin: 0 auto; padding: 8px 16px 96px; }
+  .card {
+    background: var(--card); border-radius: var(--radius); padding: 18px;
+    border: 1px solid rgba(255,255,255,.06); margin-bottom: 14px;
+  }
+  textarea {
+    width: 100%; min-height: 110px; resize: none; border: 1px solid rgba(255,255,255,.08);
+    background: var(--card2); color: var(--text); border-radius: 14px;
+    padding: 14px; font-size: 15px; line-height: 1.5; outline: none; font-family: inherit;
+  }
+  textarea:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+  .opt-group { flex: 1; }
+  .opt-group label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+  .seg { display: flex; background: var(--card2); border-radius: 12px; padding: 4px; gap: 4px; }
+  .seg button {
+    flex: 1; border: 0; background: transparent; color: var(--muted); padding: 8px 4px;
+    border-radius: 9px; font-size: 13px; cursor: pointer; transition: all .15s;
+  }
+  .seg button.active { background: var(--accent); color: #fff; font-weight: 600; }
+  .generate-btn {
+    width: 100%; margin-top: 14px; padding: 16px; border: 0; border-radius: 14px;
+    font-size: 16px; font-weight: 700; color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), #5a3df0);
+    box-shadow: 0 8px 24px rgba(124, 92, 255, .35);
+    transition: transform .1s, opacity .2s;
+  }
+  .generate-btn:active { transform: scale(.98); }
+  .generate-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  .status-card { display: none; text-align: center; }
+  .status-card.visible { display: block; }
+  .spinner {
+    width: 44px; height: 44px; margin: 10px auto 14px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.1); border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status-text { color: var(--muted); font-size: 14px; }
+  .error-text { color: var(--danger); font-size: 13px; margin-top: 8px; word-break: break-word; }
+  video {
+    width: 100%; border-radius: 14px; background: #000; display: block;
+  }
+  .result-actions { display: flex; gap: 10px; margin-top: 12px; }
+  .result-actions a, .result-actions button {
+    flex: 1; text-align: center; text-decoration: none; padding: 12px; border-radius: 12px;
+    font-size: 14px; font-weight: 600; border: 1px solid rgba(255,255,255,.12);
+    background: var(--card2); color: var(--text); cursor: pointer;
+  }
+  .result-actions .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .section-title { font-size: 15px; font-weight: 700; margin: 22px 4px 10px; }
+  .gallery-item { margin-bottom: 14px; }
+  .gallery-item .prompt {
+    font-size: 12px; color: var(--muted); margin: 8px 2px 0;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 26px 0; }
+  nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+    display: flex; background: rgba(21,21,34,.92); backdrop-filter: blur(14px);
+    border-top: 1px solid rgba(255,255,255,.07);
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+  }
+  nav button {
+    flex: 1; background: none; border: 0; color: var(--muted); font-size: 11px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
+  }
+  nav button .ico { font-size: 20px; }
+  nav button.active { color: var(--accent2); }
+  .tab { display: none; }
+  .tab.active { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🎬</div>
+  <div>
+    <h1>AI Video Generator</h1>
+    <p>Text → video, powered by AI</p>
+  </div>
+  <span class="demo-badge" id="demoBadge" style="display:none">DEMO MODE</span>
+</header>
+
+<main>
+  <!-- CREATE TAB -->
+  <section class="tab active" id="tab-create">
+    <div class="card">
+      <textarea id="prompt" placeholder="Describe your video… e.g. “A drone shot flying over a neon-lit cyberpunk city at night, rain reflecting the lights”"></textarea>
+      <div class="row">
+        <div class="opt-group">
+          <label>Aspect ratio</label>
+          <div class="seg" id="ratioSeg">
+            <button data-v="16:9" class="active">16:9</button>
+            <button data-v="9:16">9:16</button>
+            <button data-v="1:1">1:1</button>
+          </div>
+        </div>
+        <div class="opt-group">
+          <label>Duration</label>
+          <div class="seg" id="durSeg">
+            <button data-v="3">3s</button>
+            <button data-v="5" class="active">5s</button>
+            <button data-v="8">8s</button>
+          </div>
+        </div>
+      </div>
+      <button class="generate-btn" id="genBtn">✨ Generate Video</button>
+    </div>
+
+    <div class="card status-card" id="statusCard">
+      <div class="spinner"></div>
+      <div class="status-text" id="statusText">Generating your video… this can take 1–5 minutes.</div>
+      <div class="error-text" id="errorText"></div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none">
+      <video id="resultVideo" controls playsinline></video>
+      <div class="result-actions">
+        <a class="primary" id="downloadLink" download>⬇ Download</a>
+        <button id="shareBtn">🔗 Share</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GALLERY TAB -->
+  <section class="tab" id="tab-gallery">
+    <div class="section-title">Recent generations</div>
+    <div id="galleryList"></div>
+  </section>
+</main>
+
+<nav>
+  <button class="active" data-tab="tab-create"><span class="ico">✨</span>Create</button>
+  <button data-tab="tab-gallery"><span class="ico">🎞</span>Gallery</button>
+</nav>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let aspect = "16:9", duration = 5, pollTimer = null;
+
+// --- segmented controls ---
+function seg(id, cb) {
+  document.querySelectorAll(`#${id} button`).forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll(`#${id} button`).forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      cb(b.dataset.v);
+    };
+  });
+}
+seg("ratioSeg", v => aspect = v);
+seg("durSeg", v => duration = +v);
+
+// --- tabs ---
+document.querySelectorAll("nav button").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll("nav button").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById(b.dataset.tab).classList.add("active");
+    if (b.dataset.tab === "tab-gallery") loadGallery();
+  };
+});
+
+// --- config ---
+fetch("/api/config").then(r => r.json()).then(c => {
+  if (c.demo_mode) $("#demoBadge").style.display = "inline-block";
+});
+
+// --- generate ---
+$("#genBtn").onclick = async () => {
+  const prompt = $("#prompt").value.trim();
+  if (prompt.length < 3) { $("#prompt").focus(); return; }
+
+  $("#genBtn").disabled = true;
+  $("#resultCard").style.display = "none";
+  $("#statusCard").classList.add("visible");
+  $("#errorText").textContent = "";
+  $("#statusText").textContent = "Submitting job…";
+
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, aspect_ratio: aspect, duration })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Request failed");
+    pollStatus(data.job_id);
+  } catch (e) {
+    showError(e.message);
+  }
+};
+
+function pollStatus(jobId) {
+  $("#statusText").textContent = "Generating your video… this can take 1–5 minutes.";
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const s = await (await fetch(`/api/status/${jobId}`)).json();
+      if (s.status === "done") {
+        clearInterval(pollTimer);
+        showResult(s.video_url);
+      } else if (s.status === "failed") {
+        clearInterval(pollTimer);
+        showError(s.error || "Generation failed");
+      }
+    } catch (e) { /* transient network error — keep polling */ }
+  }, 3000);
+}
+
+function showResult(url) {
+  $("#statusCard").classList.remove("visible");
+  $("#genBtn").disabled = false;
+  const v = $("#resultVideo");
+  v.src = url;
+  $("#downloadLink").href = url;
+  $("#resultCard").style.display = "block";
+  $("#resultCard").scrollIntoView({ behavior: "smooth" });
+  $("#shareBtn").onclick = async () => {
+    const full = location.origin + url;
+    if (navigator.share) {
+      try { await navigator.share({ title: "AI Video", url: full }); } catch {}
+    } else {
+      await navigator.clipboard.writeText(full);
+      $("#shareBtn").textContent = "✅ Copied!";
+      setTimeout(() => $("#shareBtn").textContent = "🔗 Share", 1500);
+    }
+  };
+}
+
+function showError(msg) {
+  $("#statusCard").classList.add("visible");
+  document.querySelector("#statusCard .spinner").style.display = "none";
+  $("#statusText").textContent = "Something went wrong";
+  $("#errorText").textContent = msg;
+  $("#genBtn").disabled = false;
+}
+
+// --- gallery ---
+async function loadGallery() {
+  const list = $("#galleryList");
+  list.innerHTML = '<div class="empty">Loading…</div>';
+  const data = await (await fetch("/api/history")).json();
+  if (!data.jobs.length) {
+    list.innerHTML = '<div class="empty">No videos yet — create your first one! ✨</div>';
+    return;
+  }
+  list.innerHTML = data.jobs.map(j => `
+    <div class="card gallery-item">
+      <video src="${j.video_url}" controls playsinline preload="metadata"></video>
+      <div class="prompt">${escapeHtml(j.prompt)}</div>
+    </div>`).join("");
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+</script>
+</body>
+</html>
