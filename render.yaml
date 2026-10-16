@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: ai-video-generator
+    name: motionmint-ai-video
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -9,5 +9,9 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
-      - key: REPLICATE_API_TOKEN
-        sync: false
+      - key: HF_SPACE_ID
+        value: OpenKing/wan2-video-generation
+      - key: HF_SPACE_API_NAME
+        value: /generate_video
+      - key: MAX_ACTIVE_JOBS
+        value: 1
