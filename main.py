@@ -34,7 +34,7 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=3, max_length=1500)
     aspect_ratio: str = Field("16:9", pattern=r"^(16:9|9:16)$")
     # The free public demo is optimized for short clips, not two-minute videos.
-    duration: int = Field(3, ge=3, le=3)
+    duration: int = Field(3, ge=3, le=6)
     resolution: str = Field("720p", pattern=r"^(480p|720p)$")
     image_data: Optional[str] = Field(default=None, max_length=400_000)
 
@@ -83,9 +83,11 @@ def run_generation(job_id: str, req: GenerateRequest):
 
         client = get_client()
         width, height = (1280, 704) if req.aspect_ratio == "16:9" else (704, 1280)
-        # This public demo is configured for approximately 3 seconds (73 frames).
+        # The public Space supports up to 145 frames (~6 seconds at 24 fps).
+        # Longer clips may exceed free GPU time limits and are not offered here.
+        num_frames = min(145, max(73, req.duration * 24 + 1))
         result = client.predict(
-            req.prompt, image_path, width, height, 73, 20, 5.0, -1,
+            req.prompt, image_path, width, height, num_frames, 20, 5.0, -1,
             api_name=HF_SPACE_API_NAME,
         )
         output = result[0] if isinstance(result, (list, tuple)) else result
@@ -110,7 +112,7 @@ def run_generation(job_id: str, req: GenerateRequest):
         with LOCK:
             JOBS[job_id].update(
                 status="done", video_url=f"/videos/{filename}",
-                completed_at=time.time(), duration=3,
+                completed_at=time.time(), duration=req.duration,
             )
     except Exception as exc:
         raw = str(exc)
@@ -137,7 +139,7 @@ def health():
 
 @app.get("/api/config")
 def config():
-    return {"configured": bool(HF_SPACE_ID), "provider": "Hugging Face public Space", "space": HF_SPACE_ID, "max_active_jobs": MAX_ACTIVE_JOBS, "max_duration_seconds": 3, "free_service": True}
+    return {"configured": bool(HF_SPACE_ID), "provider": "Hugging Face public Space", "space": HF_SPACE_ID, "max_active_jobs": MAX_ACTIVE_JOBS, "max_duration_seconds": 6, "free_service": True}
 
 @app.post("/api/generate")
 def generate(req: GenerateRequest):
@@ -148,7 +150,7 @@ def generate(req: GenerateRequest):
         if active >= MAX_ACTIVE_JOBS:
             raise HTTPException(status_code=429, detail="The free AI service is busy. Please wait for the current video to finish, then try again.")
         job_id = uuid.uuid4().hex[:12]
-        JOBS[job_id] = {"job_id": job_id, "status": "queued", "prompt": req.prompt, "video_url": None, "error": None, "created_at": time.time(), "aspect_ratio": req.aspect_ratio, "duration": 3}
+        JOBS[job_id] = {"job_id": job_id, "status": "queued", "prompt": req.prompt, "video_url": None, "error": None, "created_at": time.time(), "aspect_ratio": req.aspect_ratio, "duration": req.duration}
     threading.Thread(target=run_generation, args=(job_id, req), daemon=True).start()
     return {"job_id": job_id}
 
