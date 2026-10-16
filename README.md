@@ -34,3 +34,11 @@ uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Open `http://127.0.0.1:8000`.
+
+## Troubleshooting backend unavailable
+- Deploy this FastAPI project as a **Render Web Service** using the included `render.yaml`.
+- Open `https://YOUR-SERVICE.onrender.com/health`; it should return `{"status":"ok"}`.
+- Open `https://YOUR-SERVICE.onrender.com/api/config`; it should return JSON and show the configured Hugging Face Space.
+- Use the Render service URL to open the app. If you host the HTML separately on Netlify, its API base must be configured to the Render URL; a static Netlify page cannot run `main.py` by itself.
+- Check Render Logs for build/start errors. A successful health check confirms the backend is online, but not that the third-party video model is available.
+- Public Hugging Face Spaces can queue requests, sleep, change API endpoints, or exhaust free GPU quota. No code can guarantee unlimited free generation.

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -26,7 +27,16 @@ HF_SPACE_ID = os.getenv("HF_SPACE_ID", "OpenKing/wan2-video-generation").strip()
 HF_SPACE_API_NAME = os.getenv("HF_SPACE_API_NAME", "/generate_video").strip()
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip()  # optional for public Spaces; keep private
 MAX_ACTIVE_JOBS = int(os.getenv("MAX_ACTIVE_JOBS", "1"))
-app = FastAPI(title="MotionMint AI Video Generator", version="2.0.0")
+app = FastAPI(title="MotionMint AI Video Generator", version="2.1.0")
+# Allow a separately hosted frontend (for example Netlify) to call this backend.
+# No credentials/cookies are used; keep provider tokens server-side.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 JOBS: dict[str, dict] = {}
 LOCK = threading.Lock()
 
@@ -81,14 +91,28 @@ def run_generation(job_id: str, req: GenerateRequest):
                 f.write(raw)
             image_path = temp_image
 
+        from gradio_client import handle_file
         client = get_client()
-        width, height = (1280, 704) if req.aspect_ratio == "16:9" else (704, 1280)
-        # The public Space supports up to 145 frames (~6 seconds at 24 fps).
-        # Longer clips may exceed free GPU time limits and are not offered here.
+        width, height = (832, 480) if req.aspect_ratio == "16:9" else (480, 832)
+        # Conservative settings improve the chance of completing within free GPU limits.
+        # This public Space documents 73 frames (~3 seconds) as its default; longer
+        # durations may time out on shared/free GPU capacity.
         num_frames = min(145, max(73, req.duration * 24 + 1))
+        image_input = handle_file(image_path) if image_path else None
+        api_name = HF_SPACE_API_NAME
+        # Discover the current endpoint if the Space's API name has changed.
+        try:
+            api_info = client.view_api(return_format="dict")
+            named = api_info.get("named_endpoints", {}) if isinstance(api_info, dict) else {}
+            if api_name not in named and named:
+                candidates = [name for name in named if "generate" in name.lower() or "video" in name.lower()]
+                api_name = candidates[0] if candidates else next(iter(named))
+        except Exception:
+            # Older gradio_client versions may not support return_format; use configured name.
+            pass
         result = client.predict(
-            req.prompt, image_path, width, height, num_frames, 20, 5.0, -1,
-            api_name=HF_SPACE_API_NAME,
+            req.prompt, image_input, width, height, num_frames, 20, 5.0, -1,
+            api_name=api_name,
         )
         output = result[0] if isinstance(result, (list, tuple)) else result
         if isinstance(output, dict):
@@ -139,7 +163,7 @@ def health():
 
 @app.get("/api/config")
 def config():
-    return {"configured": bool(HF_SPACE_ID), "provider": "Hugging Face public Space", "space": HF_SPACE_ID, "max_active_jobs": MAX_ACTIVE_JOBS, "max_duration_seconds": 6, "free_service": True}
+    return {"configured": bool(HF_SPACE_ID), "provider": "Hugging Face public Space", "space": HF_SPACE_ID, "max_active_jobs": MAX_ACTIVE_JOBS, "max_duration_seconds": 6, "free_service": True, "version": "2.1.0"}
 
 @app.post("/api/generate")
 def generate(req: GenerateRequest):
